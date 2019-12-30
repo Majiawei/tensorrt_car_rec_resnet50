@@ -11,7 +11,7 @@ import pycuda.autoinit
 import tensorrt as trt
 
 import sys, os
-sys.path.insert(1, os.path.join(sys.path[0], ".."))
+# sys.path.insert(1, os.path.join(sys.path[0], ".."))
 import common
 
 class ModelData(object):
@@ -50,23 +50,11 @@ def do_inference(context, h_input, d_input, h_output, d_output, stream):
 
 # The Caffe path is used for Caffe2 models.
 def build_engine_caffe(model_file, deploy_file, engine_file_path=""):
-	# # You can set the logger severity higher to suppress messages (or lower to display more messages).
-	# with trt.Builder(TRT_LOGGER) as builder, builder.create_network() as network, trt.CaffeParser() as parser:
-	#     # Workspace size is the maximum amount of memory available to the builder while building an engine.
-	#     # It should generally be set as high as possible.
-	#     builder.max_workspace_size = common.GiB(1)
-	#     # Load the Caffe model and parse it in order to populate the TensorRT network.
-	#     # This function returns an object that we can query to find tensors by name.
-	#     model_tensors = parser.parse(deploy=deploy_file, model=model_file, network=network, dtype=ModelData.DTYPE)
-	#     # For Caffe, we need to manually mark the output of the network.
-	#     # Since we know the name of the output tensor, we can find it in model_tensors.
-	#     network.mark_output(model_tensors.find(ModelData.OUTPUT_NAME))
-	#     return builder.build_cuda_engine(network)
 	def build_engine():
 	    with trt.Builder(TRT_LOGGER) as builder, builder.create_network() as network, trt.CaffeParser() as parser:
 	        builder.fp16_mode = True
 	        builder.strict_type_constraints = True
-	        builder.max_batch_size = 4
+	        builder.max_batch_size = 16
 	        # Workspace size is the maximum amount of memory available to the builder while building an engine.
 	        # It should generally be set as high as possible.
 	        builder.max_workspace_size = common.GiB(1)
@@ -80,13 +68,16 @@ def build_engine_caffe(model_file, deploy_file, engine_file_path=""):
 	        with open(engine_file_path, "wb") as f:
 	            f.write(engine.serialize())
 	        return engine
+	        # with open(engine_file_path, 'rb') as f, trt.Runtime(TRT_LOGGER) as runtime:
+	        #     engine = runtime.deserialize_cuda_engine(f.read())
+	        #     return engine
 	if os.path.exists(engine_file_path):
-		print("Reading engine from file {}".format(engine_file_path))
-		with open(engine_file_path, 'rb') as f, trt.Runtime(TRT_LOGGER) as runtime:
-			engine = runtime.deserialize_cuda_engine(f.read())
-			return engine
+	    print("Reading engine from file {}".format(engine_file_path))
+	    with open(engine_file_path, 'rb') as f, trt.Runtime(TRT_LOGGER) as runtime:
+	        engine = runtime.deserialize_cuda_engine(f.read())
+	        return engine
 	else:
-		build_engine()
+	    build_engine()
 
 
 def load_normalized_test_case(test_image, pagelocked_buffer):
@@ -144,9 +135,9 @@ def main():
             # Run the engine. The output will be a 1D tensor of length 1000, where each value represents the
             # probability that the image corresponds to that label
             # do_inference(context, h_input, d_input, h_output, d_output, stream)
-            trt_outputs = common.do_inference(context, bindings, inputs, outputs, stream, 4)
-            outs = trt_outputs[0].reshape(4,427)
-            # print(outs)
+            trt_outputs = common.do_inference(context, bindings, inputs, outputs, stream, 16)
+            outs = trt_outputs[0].reshape(16,427)
+            print(outs)
             for x in range(0,len(outs)):
             	pred = labels[np.argmax(outs[x])]
             	print(pred)

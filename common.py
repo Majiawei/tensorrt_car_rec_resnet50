@@ -47,11 +47,10 @@
 # Users Notice.
 #
 
-import os
 import argparse
-import numpy as np
+import os
+
 import pycuda.driver as cuda
-import pycuda.autoinit
 import tensorrt as trt
 
 try:
@@ -60,48 +59,79 @@ try:
 except NameError:
     FileNotFoundError = IOError
 
+
 def GiB(val):
     return val * 1 << 30
+
 
 def find_sample_data(description="Runs a TensorRT Python sample", subfolder="", find_files=[]):
     '''
     Parses sample arguments.
+
     Args:
         description (str): Description of the sample.
         subfolder (str): The subfolder containing data relevant to this sample
         find_files (str): A list of filenames to find. Each filename will be replaced with an absolute path.
+
     Returns:
         str: Path of data directory.
-    Raises:
-        FileNotFoundError
     '''
 
     # Standard command-line arguments for all samples.
-    kDEFAULT_DATA_ROOT = os.path.join(os.sep, "usr", "src", "tensorrt", "data")
+    # kDEFAULT_DATA_ROOT = os.path.join(os.sep, "usr", "src", "tensorrt", "data")
+    kDEFAULT_DATA_ROOT = "/rdata/qi.liu/code/TRT/lxj/onnx2trt/"
     parser = argparse.ArgumentParser(description=description, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("-d", "--datadir", help="Location of the TensorRT sample data directory.", default=kDEFAULT_DATA_ROOT)
-    args, unknown_args = parser.parse_known_args()
+    parser.add_argument("-d", "--datadir",
+                        help="Location of the TensorRT sample data directory, and any additional data directories.",
+                        action="append", default=[kDEFAULT_DATA_ROOT])
+    args, _ = parser.parse_known_args()
 
-    # If data directory is not specified, use the default.
-    data_root = args.datadir
-    # If the subfolder exists, append it to the path, otherwise use the provided path as-is.
-    subfolder_path = os.path.join(data_root, subfolder)
-    data_path = subfolder_path
-    if not os.path.exists(subfolder_path):
-        print("WARNING: " + subfolder_path + " does not exist. Trying " + data_root + " instead.")
-        data_path = data_root
+    def get_data_path(data_dir):
+        # If the subfolder exists, append it to the path, otherwise use the provided path as-is.
+        data_path = os.path.join(data_dir, subfolder)
+        if not os.path.exists(data_path):
+            print("WARNING: " + data_path + " does not exist. Trying " + data_dir + " instead.")
+            data_path = data_dir
+        # Make sure data directory exists.
+        if not (os.path.exists(data_path)):
+            print("WARNING: {:} does not exist. Please provide the correct data path with the -d option.".format(
+                data_path))
+        return data_path
 
-    # Make sure data directory exists.
-    if not (os.path.exists(data_path)):
-        raise FileNotFoundError(data_path + " does not exist. Please provide the correct data path with the -d option.")
+    data_paths = [get_data_path(data_dir) for data_dir in args.datadir]
+    return data_paths, locate_files(data_paths, find_files)
 
-    # Find all requested files.
-    for index, f in enumerate(find_files):
-        find_files[index] = os.path.abspath(os.path.join(data_path, f))
-        if not os.path.exists(find_files[index]):
-            raise FileNotFoundError(find_files[index] + " does not exist. Please provide the correct data path with the -d option.")
 
-    return data_path, find_files
+def locate_files(data_paths, filenames):
+    """
+    Locates the specified files in the specified data directories.
+    If a file exists in multiple data directories, the first directory is used.
+
+    Args:
+        data_paths (List[str]): The data directories.
+        filename (List[str]): The names of the files to find.
+
+    Returns:
+        List[str]: The absolute paths of the files.
+
+    Raises:
+        FileNotFoundError if a file could not be located.
+    """
+    found_files = [None] * len(filenames)
+    for data_path in data_paths:
+        # Find all requested files.
+        for index, (found, filename) in enumerate(zip(found_files, filenames)):
+            if not found:
+                file_path = os.path.abspath(os.path.join(data_path, filename))
+                if os.path.exists(file_path):
+                    found_files[index] = file_path
+
+    # Check that all files were found
+    for f, filename in zip(found_files, filenames):
+        if not f or not os.path.exists(f):
+            raise FileNotFoundError("Could not find {:}. Searched in data paths: {:}".format(filename, data_paths))
+    return found_files
+
 
 # Simple helper data class that's a little nicer to use than a 2-tuple.
 class HostDeviceMem(object):
@@ -114,6 +144,7 @@ class HostDeviceMem(object):
 
     def __repr__(self):
         return self.__str__()
+
 
 # Allocates all buffers required for an engine, i.e. host/device inputs/outputs.
 def allocate_buffers(engine):
@@ -135,6 +166,7 @@ def allocate_buffers(engine):
         else:
             outputs.append(HostDeviceMem(host_mem, device_mem))
     return inputs, outputs, bindings, stream
+
 
 # This function is generalized for multiple inputs/outputs.
 # inputs and outputs are expected to be lists of HostDeviceMem objects.

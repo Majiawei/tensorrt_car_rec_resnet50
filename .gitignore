@@ -1,0 +1,6 @@
+*.onnx
+*.trt
+*.pyc
+*.tar
+*.caffemodel
+*.prototxt

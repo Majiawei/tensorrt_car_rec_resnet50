@@ -1,0 +1,3 @@
+/home/user/Work/mjw/tensorrt/agx_tensorrt_merge/tensorrt_car_rec_resnet50/car_rec_test/1*11580*17449.jpg
+/home/user/Work/mjw/tensorrt/agx_tensorrt_merge/tensorrt_car_rec_resnet50/car_rec_test/1*12560*17564.jpg
+/home/user/Work/mjw/tensorrt/agx_tensorrt_merge/tensorrt_car_rec_resnet50/car_rec_test/201905261424_000967AA*320*30.jpg
